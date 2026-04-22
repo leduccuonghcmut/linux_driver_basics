@@ -1,66 +1,133 @@
-# 04_devicefiles
+# Giới thiệu về Device File trong Linux
+## 1. Device Files là gì?
 
-This is an introduction to device files, device numbers, block & character devices.
+**Device Files** đóng vai trò là một cánh cửa kết nối giữa **Userspace**  và **Kernel Space**. 
 
-## Device files
+Thông thường, các Device Files được hệ thống tự động tạo ra và quản lý trong thư mục `/dev`. Tuy nhiên, về mặt kỹ thuật, bạn có thể tạo chúng ở bất kỳ đâu. Hầu hết các tập tin trong `/dev` là tạm thời (được tạo ra bởi `udev` hoặc `devtmpfs` khi khởi động). Nếu bạn tắt Raspberry Pi, rút thẻ nhớ cắm vào máy tính và mở thư mục `/dev` trên thẻ nhớ đó, bạn sẽ thấy nó gần như trống rỗng.
 
-Device files can be used as an interface between the userspace and a Linux driver or kernel module. Typically the device files live in the /dev folder but they can be created anywhere. Most device files are temporary files and when you turn off your board and navigate into the dev folder, it will be almost empty.
+### Phân tích `output` của lệnh `ls`
 
-Here is how a regular file looks like when displayed with the ls command:
+Ví dụ với lệnh `ls -l`:
 
-~~~
-~ # ls -l 
--rw-rw-rw-    1 root     root       3932160 Jan  1  1970 mypic_ramos.raw
-~~~
+```bash
+-rw-r--r-- 1 pi pi 1169 Apr  22 08:45 README.md
+```
+* **Ký tự đầu tiên `-`**: Chỉ định đây là một tập tin thông thường.
+* **`rw-r--r--`**: Quyền truy cập.
+* **`1`**: Số lượng hardlinks trỏ đến tập tin này.
+* **`pi pi`**: Chủ sở hữu và nhóm.
+* **`1169`**: Kích thước tập tin tính bằng Bytes.
+* **`Dec 6 20:08` & `README.md`**: Thời gian chỉnh sửa cuối cùng và tên tập tin.
 
-The leading *-* indicate, it is a regular file, the next part are the file permissions. The 1 is the number of hardlinks pointing to the file. Then we can see the owners and the group of the file. 3932160 is the size of the file in bytes. Finally we have the last modified date and the filename. 
+Bây giờ, hãy so sánh với đầu ra khi kiểm tra các **tập tin thiết bị**:
 
-When looking at device files, the ls output looks a little bit different:
+```bash
+crw-rw---- 1 root gpio    254,  0 Dec  7 14:07 /dev/gpiochip0
+brw-rw---- 1 root disk    179,  0 Dec  7 14:07 /dev/mmcblk0
+brw-rw---- 1 root disk    179,  1 Dec  7 14:07 /dev/mmcblk0p1
+crw-rw---- 1 root dialout   4, 64 Dec  7 14:07 /dev/ttyS0
+```
 
-~~~
-~ # ls -l /dev
-total 0
-brw-------    1 root     root        7,   3 Jan  1 00:00 loop3
-crw-------    1 root     root      254,   0 Jan  1 00:00 gpiochip0
-brw-------    1 root     root       31,   1 Jan  1 00:00 mtdblock1
-crw-------    1 root     root       81,  10 Jan  1 00:00 video10
-crw-------    1 root     root       81,  23 Jan  1 00:00 v4l-subdev2
-v.v..
-~~~
+Có thể nhận thấy hai điểm khác biệt cốt lõi: 
+1. Ký tự đầu tiên không còn là `-` mà là `c` hoặc `b`.
+2. Không có thông tin về dung lượng, thay vào đó là hai con số được phân tách bằng dấu phẩy (ví dụ: `254, 0`).
 
-The output looks similar but there are two differences. First, the leading letter of the devices.
+---
 
-## Character and block devices
+## 2. Character Devices và Block Devices
 
-Linux classifies devices into two main types:
+Ký tự đầu tiên (`c` hoặc `b`) cho biết cách hệ điều hành tổ chức và truyền tải dữ liệu với thiết bị đó.
 
-| Type        | Prefix | Access Mode      |                   Examples                           |
-|-------------|--------|------------------|------------------------------------------------------|
-| Character   | `c`    | Byte-stream      | `/dev/video10`, `/dev/gpiochip0`, `/dev/v4l-subdev2` |
-| Block       | `b`    | Block-oriented   | `/dev/loop3`, `/dev/mtdblock1`                       |
+### Block Devices (`b`)
+* **Đặc điểm:** Dữ liệu được đọc/ghi theo từng `khối` có kích thước cố định (thường là 512 bytes, 1KB, 4KB...). Hệ điều hành có thể truy cập ngẫu nhiên vào bất kỳ vị trí nào trên thiết bị và thường sử dụng bộ đệm (cache/buffer) để tăng tốc độ.
+* **Ví dụ trong log:** `/dev/mmcblk0` là thiết bị đại diện cho thẻ nhớ SD trên Raspberry Pi. Ta không thể đọc 1 byte lẻ tẻ từ ổ cứng/thẻ nhớ ở mức vật lý, mà phải nạp cả một block lên RAM để xử lý.
 
-### Character Devices
-Character devices allow access one byte at a time in a sequential manner. They are not buffered by the kernel and are typically used for devices like:
-- Serial ports
-- GPIO
-- Cameras 
-- Sensors
+### Character Devices (`c`)
+* **Đặc điểm:** Dữ liệu được truyền tải tuần tự dưới dạng một luồng các byte hoặc ký tự. Không có bộ đệm và dữ liệu đọc ra/ghi vào sẽ được xử lý ngay lập tức. Ta không thể tua lại một ký tự đã đi qua.
+* **Ví dụ trong log:** `/dev/ttyS0` đại diện cho cổng Serial (UART) của Raspberry Pi. Khi giao tiếp Serial, dữ liệu luôn được gửi/nhận từng byte một. Tương tự với `/dev/gpiochip0` (điều khiển chân GPIO).
 
-Operations: `read()`, `write()`, `ioctl()`
+---
 
-### Block Devices
-Block devices support random access and are read/written in blocks (typically 512 bytes or more). They are used for storage media such as:
-- Flash memory
-- SD cards
-- eMMC
-- NAND/NOR (via `/dev/mtdblockX`)
+## 3. Device Numbers
 
-Operations: `open()`, `read()`, `write()`, `ioctl()`, often buffered via page cache.
+Khác biệt thứ hai là sự vắng mặt của kích thước tập tin. Thay vào đó, Linux sử dụng **Device Numbers**, bao gồm hai thành phần: **Major** và **Minor**.
+Ví dụ với `/dev/gpiochip0`, ta có `Major = 254` và `Minor = 0`.
 
-## Device Numbers
-Each device file is associated with a pair of numbers:
-- **Major number**: Identifies the driver associated with the device.
-- **Minor number**: Distinguishes between different devices handled by the same driver.
+* **Major Number:** Định danh cho **Driver** nào trong Kernel sẽ chịu trách nhiệm quản lý thiết bị này. Các thiết bị dùng chung một Driver thường sẽ có chung số Major.
+* **Minor Number:** Định danh cho **cá thể** cụ thể của thiết bị đó. (Có thể nhận giá trị từ 0 đến 255).
 
-## Creating Device Files
+*Ví dụ:* Ở log trên, thiết bị lưu trữ SD Card `mmcblk0` và phân vùng thứ nhất của nó `mmcblk0p1` đều dùng chung một Driver (Major = `179`), nhưng là các phân vùng/thực thể khác nhau nên Minor khác nhau (`0` và `1`).
 
+Để xem danh sách các Major Number đang được Kernel sử dụng, có thể đọc nội dung file ảo `/proc/devices`:
+
+```bash
+$ grep 179 /proc/devices 
+179 mmc
+
+$ grep 4 /proc/devices 
+  4 /dev/vc/0
+  4 tty
+  4 ttyS
+
+$ grep 254 /proc/devices 
+254 gpiochip
+```
+
+> **NOTE:** Liên kết giữa phần cứng vật lý và Driver trong Kernel **KHÔNG** dựa vào tên tập tin (như `mmcblk0`), mà dựa hoàn toàn vào **Device Numbers (Major, Minor)**.
+
+---
+
+## 4. Thực nghiệm: Khởi tạo Device Files thủ công
+
+Để chứng minh rằng Hệ điều hành Linux chỉ quan tâm đến Device Numbers chứ không quan tâm đến tên tập tin, chúng ta sẽ làm 2 bài test sử dụng lệnh `mknod`.
+
+### Test 1: Với Block Device
+
+Sử dụng `hexdump` để đọc một vài byte thô trực tiếp từ thẻ nhớ SD của Raspberry Pi (thông qua `/dev/mmcblk0`):
+
+```bash
+sudo hexdump /dev/mmcblk0 | head
+# Đầu ra sẽ hiển thị các đoạn mã hex (dữ liệu thô của thẻ nhớ)
+# 0000000 b8fa 1000 d08e 00bc b8b0 0000 d88e c08e ...
+```
+
+Bây giờ, hãy di chuyển về thư mục Home và tạo một Device File "giả mạo" bằng lệnh `mknod`, gán cho nó cùng thông số Major (`179`) và Minor (`0`) như thiết bị gốc:
+
+```bash
+cd ~
+sudo mknod mymmc b 179 0
+```
+*(Cú pháp: `mknod [tên_file] [loại_thiết_bị] [Major] [Minor]`)*
+
+Thử dump file vừa tạo:
+
+```bash
+sudo hexdump mymmc | head
+# 0000000 b8fa 1000 d08e 00bc b8b0 0000 d88e c08e ...
+```
+**Kết quả:** Đầu ra hoàn toàn trùng khớp! Dù file tên là `mymmc` và nằm ở `/home/pi`, Kernel vẫn biết phải trỏ nó tới Driver quản lý thẻ nhớ nhờ cặp số `179, 0`.
+
+### Test 2: Với Character Device
+
+Nếu dùng jumper nối tắt chân TX và RX của Raspberry Pi, mở khóa cổng Serial trong `raspi-config` và truy cập qua terminal:
+
+```bash
+screen /dev/ttyS0 9600
+```
+Mọi ký tự gõ trên bàn phím sẽ được gửi qua TX, loopback về RX và in ngược lại lên màn hình.
+
+Bây giờ, thoát `screen`, tạo một Device File mới có Major `4` và Minor `64` tương tự như `/dev/ttyS0`:
+
+```bash
+cd ~
+sudo mknod myserial c 4 64
+```
+
+Chạy `screen` với file mới:
+
+```bash
+sudo screen myserial 9600
+```
+**Kết quả:** Hệ thống vẫn hoạt động hoàn hảo , gõ ký tự và nó vẫn echo lại bình thường.
+
+**Chốt lại:** Tên của Device File (ví dụ `/dev/ttyS0` hay `myserial`) chỉ là một quy ước để con người dễ nhớ. Yếu tố duy nhất quyết định việc kết nối thành công với Driver dưới Kernel chính là cặp **Major Number** và **Minor Number**. Mọi file có cùng Major/Minor đều trỏ về cùng một phần cứng.
